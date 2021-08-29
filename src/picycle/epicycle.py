@@ -1,239 +1,188 @@
-import matplotlib.pyplot as plt
-import numpy as np
-from skimage import io
-import cv2
-from skimage import feature 
-import copy
-import networkx as nx
-from sklearn.neighbors import NearestNeighbors
-from skimage.transform import resize
-from collections import OrderedDict
+import cv2 # for finding contours to extract points of figure
+import matplotlib.pyplot as plt # for plotting and creating figures
+import numpy as np # for easy and fast number calculation
+from math import tau # tau is constant number = 2*PI
+from scipy.integrate import quad_vec # for calculating definite integral 
+from tqdm import tqdm # for progress bar
+import matplotlib.animation as animation # for compiling animation and exporting video 
+import argparse
 
-def removeDuplicates(lst):
-    b = []
-    for i in lst:
-        # Add to the new list
-        # only if not present
-        if i not in b:
-            b.append(i)
-    return b
+# function to generate x+iy at given time t
+def f(t, t_list, x_list, y_list):
+    return np.interp(t, t_list, x_list + 1j*y_list)
 
-def pyth(p1,p2): #defined as tubles
-    return np.sqrt((p1[0]-p2[0])**2 + (p1[1]-p2[1])**2)
+# reading the image and convert to greyscale mode
+# ensure that you use image with black image with white background
 
-def comparison(CurrentNode,ChosenNode, zeros_list,original_dist):
-    #Now it is time for some comparison 
-    comparison = []
-    dis = [i for i in original_dist[ChosenNode]]#Get the distance from ori list
-    dis_interest = [dis[i] for i in zeros_list] #nclude the zeros only
-    dis_sum = sum(dis) #Sum current configuration
-    comparison.append(dis_sum)
-    cur_node = original_dist[ChosenNode][CurrentNode] #Call the distance
-    sum_1 = cur_node + dis_interest[0] #Do sum with first edge
-    sum_2 = cur_node + dis_interest[1] #Do some with second edge
-    comparison.append(sum_1)
-    comparison.append(sum_2)
-    min_com = (np.array(comparison)).argmin()
-    return min_com, dis_interest[0], dis_interest[1]
+parser = argparse.ArgumentParser(description='Listing distination and path')
+parser.add_argument('-p', '--path', dest="path", help="path to picture")
+parser.add_argument('-d', '--dist', dest="dist", default= "./", help="video distination")
+arg = parser.parse_args()
 
+path = arg.path
+dist = arg.dist
 
+img = cv2.imread(path)
+img_gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 
-def linefollowing(points,dist_m,original_dist):
-       
-    #random
-    '''
-    start_point = random.randint(0,len(points)-1)
-    x_sorted.append(points[start_point][0])
-    y_sorted.append(points[start_point][1])
-    '''
-    #predefined 
-    start_point = 5 #Or  random
-    prev_nodes = []
-    prev_nodes.append(start_point)
-    
-    ite = 100 + len(points)
-    #Assigning initial order
-    for a in range(ite): #Probably for an undefined time
-    
-        #Storing value temprorary
-        temp = original_dist[start_point][prev_nodes[-1]]
-        print("temp: ", temp)
-        #Setting recently visited node to zero
-        original_dist[start_point][prev_nodes[-1]] = 0
-        #Getting the interesting row
-        min_dis = np.array(original_dist[start_point])
-        #Masking zeros
-        valid_idx = np.where(np.array(min_dis) > 0)[0]
-        #Get the index
-        ind = valid_idx[min_dis[valid_idx].argmin()]
-        #Store the original value
-        original_dist[start_point][prev_nodes[-1]] = temp
-        #Find the connections in the chosen node
-        con_node = dist_m[ind]
-        zer = np.where(np.array(con_node)==0)[0] #Should always containt elements
-        #if len(zer)>2:
-          # print("Zer is too large")
-          # print("iteration: ", a)
-        if len(zer) == 2:
-            min_com, dis1, dis2 = comparison(start_point,ind,zer,original_dist)
-            b=1 #An iterative timer
-            print("node of interest is: ", ind, "and its distance row is: ")
-            print(con_node)
-            print(" ")
-            print("I am coming from node ", start_point, ", and my distance row is:  ")
-            print(dist_m[start_point])
-            if min_com == 0: #Keep the suggested node as it is and look for the second smallest
-                print("min_com==0")
-                for n in range(original_dist[ind]):
-                    b_small = np.argpartition(original_dist[ind],b)
-                    b_small = b_small[b]
-                    #Call the list of possible connections
-                    L= dist_m[b_small]
-                    zer_1 = np.where(np.array(L)==0)[0]
-                    if len(zer_1)<2: #No connections made on that node yet
-                        #Choose that node
-                        ind = b_small
-                        break
-                    
-                    b += b_small
-                
-            else:
-                #choose this edge and remove previous configuration
-                if min_com == 1:
-                    #Modify the chosen node's dist matrix
-                    print("min_com==1")
-                    dist_m[ind][zer[0]] = dis1
-                    dist_m[zer[0]][ind] = dis1
-                if min_com == 2:
-                    #Modify the chosen node's dist matrix
-                    print("min_com==2")
-                    dist_m[ind][zer[1]] = dis2
-                    dist_m[zer[1]][ind] = dis2
-    
-                
-    
-        #Set it to zero in the dist matrix
-        dist_m[start_point][ind] = 0
-        dist_m[ind][start_point] = 0 
-        
-        #Start point re-assigning
-        prev_nodes.append(start_point)
-        start_point = ind
-    
-    
-        
-    
-    #create x and y from dist_m's zeros
-    x_sorted = []
-    y_sorted = []
-    start_point = 5
-    x_sorted.append(points[start_point][0])
-    y_sorted.append(points[start_point][1])
-    ind_l = []
-    for _ in range(len(dist_m)-2):
-        sp = dist_m[start_point]
-        z=np.where(np.array(sp)==0)
-        fz = z[0][0] #index of first zero
-        ind_l.append(fz)
-        dist_m[fz][start_point] = np.NINF
-        dist_m[start_point][fz] = np.NINF    
-        x_sorted.append(points[fz][0])
-        y_sorted.append(points[fz][1])
-        start_point = fz 
-    
-    x_sorted.append(x_sorted[0])
-    y_sorted.append(y_sorted[0])
-    
-    
-    print("sorted")
-    print("x_sorted: ", x_sorted)
-    print("y_sorted: ", y_sorted)
-    
-    return x_sorted, y_sorted
+# find the contours in the image
+ret, thresh = cv2.threshold(img_gray, 127, 255, 0) # making pure black and white image
+contours, hierarchy = cv2.findContours(thresh, cv2.RETR_TREE, cv2.CHAIN_APPROX_NONE) # finding available contours i.e closed loop objects
+contours = np.array(contours[1]) # contour at index 1 is the one we are looking for
 
+# split the co-ordinate points of the contour
+# we reshape this to make it 1D array
+x_list, y_list = contours[:, :, 0].reshape(-1,), -contours[:, :, 1].reshape(-1,)
 
-def img_init(path, scale=20, s=1):
-    img = io.imread(path)
-       
-    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    
-    #percent by which the image is resized
-    scale_percent = scale
-    
-    #calculate the 50 percent of original dimensions
-    width = int(gray.shape[1] * scale_percent / 100)
-    height = int(gray.shape[0] * scale_percent / 100)
-    
-    # dsize
-    dsize = (width, height)
-    
-    # resize image
-    gray = cv2.resize(gray, dsize)
-    
-    #edge detection 
-    edges = feature.canny(gray,sigma=s)
-    #edges = cv2.Canny(gray,100,200)
-    unity = np.ones((edges.shape[0], edges.shape[1]))
-    bi_e = unity * edges
-    
-    x = []
-    y = []
-    for i in range(bi_e.shape[0]):
-        for j in range(bi_e.shape[1]):
-            if bi_e[i][j] == 1:
-                x.append(j)
-                y.append(i)
-    y = [abs(i-bi_e.shape[0]) for i in y]
-    
-    return np.array(x), np.array(y), gray, edges
-    
-    
-def Neighbour_Sorting(x,y, nn=2): #nn refers to the number of points connected together, has to be two
-    
-    #Explore NearestNeighbors algorithm
-    points = np.c_[x,y]
-    clf = NearestNeighbors(n_neighbors=nn).fit(points)
-    G = clf.kneighbors_graph() #Adjacency matrix
-    #G = clf.radius_neighbors_graph()
-    count_p = 0
-    count_n = 0
-    G_arr = G.toarray()
-    '''
-    for i in range(len(G_arr)):
-        a = np.where(G_arr[:,i] == 1)
-        if len(a[0]) > 2:
-            count_p += 1
-            print('Found', count_p, 'larger than two elements')
-        if len(a[0]) < 2:
-            count_n += 1
-            print('Found', count_n, 'smaller than two elements')
-     '''       
-    #Now we can do the connections based on the adjacency matrix
-    
-    T = nx.from_scipy_sparse_matrix(G)
-    order = list(nx.dfs_preorder_nodes(T, 0)) ################ What does this do???
-    x_o = x[order]
-    y_o = y[order]
-    
+# center the contour to origin
+x_list = x_list - np.mean(x_list)
+y_list = y_list - np.mean(y_list)
 
-    #Choosing an appropriate starting point
-    paths = [list(nx.dfs_preorder_nodes(T, i)) for i in range(len(points))]
+# visualize the contour
+fig = plt.figure()
+ax = fig.add_subplot(111)
+ax.plot(x_list, y_list)
+
+# later we will need these data to fix the size of figure
+xlim_data = plt.xlim() 
+ylim_data = plt.ylim()
+
+plt.show()
+
+# time data from 0 to 2*PI as x,y is the function of time.
+t_list = np.linspace(0, tau, len(x_list)) # now we can relate f(t) -> x,y
+
+# Now find forier coefficient from -n to n circles
+# ..., c-3, c-2, c-1, c0, c1, c2, c3, ...
+order = 100 # -order to order i.e -100 to 100
+# you can change the order to get proper figure
+# too much is also not good, and too less will not produce good result
+
+print("generating coefficients ...")
+# lets compute fourier coefficients from -order to order
+c = []
+pbar = tqdm(total=(order*2+1))
+# we need to calculate the coefficients from -order to order
+for n in range(-order, order+1):
+    # calculate definite integration from 0 to 2*PI
+    # formula is given in readme
+    coef = 1/tau*quad_vec(lambda t: f(t, t_list, x_list, y_list)*np.exp(-n*t*1j), 0, tau, limit=100, full_output=1)[0]
+    c.append(coef)
+    pbar.update(1)
+pbar.close()
+print("completed generating coefficients.")
+
+# converting list into numpy array
+c = np.array(c)
+
+# save the coefficients for later use
+np.save("coeff.npy", c)
+
+## -- now to make animation with epicycle -- ##
+
+# this is to store the points of last circle of epicycle which draws the required figure
+draw_x, draw_y = [], []
+
+# make figure for animation
+fig, ax = plt.subplots()
+
+# different plots to make epicycle
+# there are -order to order numbers of circles
+circles = [ax.plot([], [], 'r-')[0] for i in range(-order, order+1)]
+# circle_lines are radius of each circles
+circle_lines = [ax.plot([], [], 'b-')[0] for i in range(-order, order+1)]
+# drawing is plot of final drawing
+drawing, = ax.plot([], [], 'k-', linewidth=2)
+
+# original drawing
+orig_drawing, = ax.plot([], [], 'g-', linewidth=0.5)
+
+# to fix the size of figure so that the figure does not get cropped/trimmed
+ax.set_xlim(xlim_data[0]-200, xlim_data[1]+200)
+ax.set_ylim(ylim_data[0]-200, ylim_data[1]+200)
+
+# hide axes
+ax.set_axis_off()
+
+# to have symmetric axes
+ax.set_aspect('equal')
+
+# Set up formatting for the video file
+Writer = animation.writers['ffmpeg']
+writer = Writer(fps=30, metadata=dict(artist='Amrit Aryal'), bitrate=1800)
+
+print("compiling animation ...")
+# set number of frames
+frames = 300
+pbar = tqdm(total=frames)
+
+# save the coefficients in order 0, 1, -1, 2, -2, ...
+# it is necessary to make epicycles
+def sort_coeff(coeffs):
+    new_coeffs = []
+    new_coeffs.append(coeffs[order])
+    for i in range(1, order+1):
+        new_coeffs.extend([coeffs[order+i],coeffs[order-i]])
+    return np.array(new_coeffs)
+
+# make frame at time t
+# t goes from 0 to 2*PI for complete cycle
+def make_frame(i, time, coeffs):
+    global pbar
+    # get t from time
+    t = time[i]
+
+    # exponential term to be multiplied with coefficient 
+    # this is responsible for making rotation of circle
+    exp_term = np.array([np.exp(n*t*1j) for n in range(-order, order+1)])
+
+    # sort the terms of fourier expression
+    coeffs = sort_coeff(coeffs*exp_term) # coeffs*exp_term makes the circle rotate. 
+    # coeffs itself gives only direction and size of circle
+
+    # split into x and y coefficients
+    x_coeffs = np.real(coeffs)
+    y_coeffs = np.imag(coeffs)
+
+    # center points for fisrt circle
+    center_x, center_y = 0, 0
+
+    # make all circles i.e epicycle
+    for i, (x_coeff, y_coeff) in enumerate(zip(x_coeffs, y_coeffs)):
+        # calculate radius of current circle
+        r = np.linalg.norm([x_coeff, y_coeff]) # similar to magnitude: sqrt(x^2+y^2)
+
+        # draw circle with given radius at given center points of circle
+        # circumference points: x = center_x + r * cos(theta), y = center_y + r * sin(theta)
+        theta = np.linspace(0, tau, num=50) # theta should go from 0 to 2*PI to get all points of circle
+        x, y = center_x + r * np.cos(theta), center_y + r * np.sin(theta)
+        circles[i].set_data(x, y)
+
+        # draw a line to indicate the direction of circle
+        x, y = [center_x, center_x + x_coeff], [center_y, center_y + y_coeff]
+        circle_lines[i].set_data(x, y)
+
+        # calculate center for next circle
+        center_x, center_y = center_x + x_coeff, center_y + y_coeff
     
-    mindist = np.inf
-    minidx = 0
-    
-    for i in range(len(points)):
-        p = paths[i]           # order of nodes
-        ordered = points[p]    # ordered nodes
-        # find cost of that order by the sum of euclidean distances between points (i) and (i+1)
-        cost = (((ordered[:-1] - ordered[1:])**2).sum(1)).sum()
-        if cost < mindist:
-            mindist = cost
-            minidx = i
-    
-    opt_order = paths[minidx]
-    x_o = x[opt_order]
-    y_o = y[opt_order]
-    points_o = points[opt_order]
-   
-    return x_o, y_o, G, clf, G_arr, points_o 
+    # center points now are points from last circle
+    # these points are used as drawing points
+    draw_x.append(center_x)
+    draw_y.append(center_y)
+
+    # draw the curve from last point
+    drawing.set_data(draw_x, draw_y)
+
+    # draw the real curve
+    #orig_drawing.set_data(x_list, y_list)
+
+    # update progress bar
+    pbar.update(1)
+
+# make animation
+# time is array from 0 to tau 
+time = np.linspace(0, tau, num=frames)
+anim = animation.FuncAnimation(fig, make_frame, frames=frames, fargs=(time, c),interval=5)
+anim.save(dist+'epicycle.mp4', writer=writer)
+pbar.close()
+print("completed: epicycle.mp4")
