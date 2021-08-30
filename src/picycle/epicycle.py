@@ -47,7 +47,7 @@ ax.plot(x_list, y_list)
 xlim_data = plt.xlim() 
 ylim_data = plt.ylim()
 
-plt.show()
+#plt.show()
 
 # time data from 0 to 2*PI as x,y is the function of time.
 t_list = np.linspace(0, tau, len(x_list)) # now we can relate f(t) -> x,y
